@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SheetJS Practice Canvas</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind Prose (for nice text formatting in the guide) -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <!-- SheetJS (XLSX) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Ace Editor & Language Tools -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ext-language_tools.js"></script> 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-javascript.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-monokai.js"></script>
+
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e1e1e; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        /* Excel-like Table Styling */
+        .sheet-preview table {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 0.875rem;
+        }
+        .sheet-preview th, .sheet-preview td {
+            border: 1px solid #d1d5db;
+            padding: 4px 8px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .sheet-preview th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            color: #374151;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .sheet-preview td {
+            background-color: white;
+            color: #1f2937;
+        }
+        
+        #editor { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+
+        /* Tab Styling */
+        .sheet-tab {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border-right: 1px solid #374151;
+            background-color: #1f2937;
+            color: #9ca3af;
+            user-select: none;
+            transition: all 0.2s;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .sheet-tab:hover { background-color: #374151; color: white; }
+        .sheet-tab.active {
+            background-color: #f3f4f6;
+            color: #111827;
+            border-bottom: 2px solid #16a34a;
+            font-weight: 600;
+        }
+
+        /* Modal Transitions */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: opacity 200ms, transform 200ms; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: opacity 200ms, transform 200ms; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 h-screen flex flex-col overflow-hidden font-sans">
+
+    <!-- Header / Toolbar -->
+    <header class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0 z-10">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            <h1 class="text-lg font-bold text-white tracking-wide">SheetJS <span class="text-green-400 font-light">Playground</span></h1>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Guide Button -->
+            <button onclick="toggleGuide()" class="px-4 py-1.5 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors border border-purple-600 flex items-center gap-2 mr-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                Guide
+            </button>
+
+            <input type="file" id="uploadInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileUpload(event)">
+            
+            <button onclick="document.getElementById('uploadInput').click()" class="px-4 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-gray-200 text-sm font-medium transition-colors border border-blue-600 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                Upload
+            </button>
+
+            <button onclick="resetPlayground()" class="px-4 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium transition-colors border border-gray-600 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Reset
+            </button>
+            <button id="pauseBtn" onclick="togglePause()" class="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium transition-colors shadow-sm hidden">
+                Pause
+            </button>
+             <button onclick="runCode()" title="Ctrl + Enter" class="px-5 py-1.5 rounded bg-green-600 hover:bg-green-500 text-white text-sm font-bold transition-colors shadow-lg flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Execute <span class="text-green-200 font-normal text-xs opacity-75 hidden md:inline">(Ctrl+Enter)</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex overflow-hidden relative">
+        
+        <!-- Left Panel: Code Editor -->
+        <div class="w-1/2 flex flex-col border-r border-gray-700 relative">
+            <div class="bg-gray-800 text-xs text-gray-400 px-4 py-1 border-b border-gray-700 flex justify-between">
+                <span>script.js</span>
+                <span>Context: <code class="text-blue-300">workbook</code>, <code class="text-blue-300">XLSX</code></span>
+            </div>
+            <div class="relative flex-1">
+                <div id="editor"></div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Output & Preview -->
+        <div class="w-1/2 flex flex-col bg-gray-900">
+            <!-- Top Right: Visual Preview -->
+            <div class="h-3/5 flex flex-col border-b border-gray-700">
+                <div class="bg-gray-800 text-xs text-gray-400 px-4 py-1 border-b border-gray-700 flex justify-between items-center">
+                    <span>Workbook Preview</span>
+                    <button onclick="downloadWorkbook()" class="text-blue-400 hover:text-blue-300 text-xs hover:underline">Download .xlsx</button>
+                </div>
+                <!-- Tabs -->
+                <div id="sheet-tabs" class="flex overflow-x-auto bg-gray-800 border-b border-gray-700"></div>
+                <!-- Content -->
+                <div class="flex-1 overflow-auto bg-gray-100 p-0 relative" id="preview-container">
+                    <div id="html-preview" class="sheet-preview min-h-full min-w-full w-fit bg-gray-100"></div>
+                </div>
+            </div>
+
+            <!-- Bottom Right: Console Output -->
+            <div class="h-2/5 flex flex-col bg-[#1e1e1e]">
+                <div class="bg-gray-800 text-xs text-gray-400 px-4 py-1 border-b border-gray-700 flex justify-between">
+                    <span>Console Output</span>
+                    <button onclick="clearConsole()" class="text-gray-500 hover:text-gray-300">Clear</button>
+                </div>
+                <div id="console-output" class="flex-1 overflow-auto p-3 font-mono text-sm text-gray-300 space-y-1">
+                    <div class="text-gray-500 italic">// Console ready...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GUIDE MODAL -->
+        <div id="guideModal" class="hidden absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-6 backdrop-blur-sm transition-opacity duration-200">
+            <div class="bg-gray-800 w-full max-w-4xl h-[90%] rounded-lg border border-gray-600 shadow-2xl flex flex-col">
+                <!-- Modal Header -->
+                <div class="flex justify-between items-center px-6 py-4 border-b border-gray-700 bg-gray-900 rounded-t-lg">
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        SheetJS Beginner's Guide
+                    </h2>
+                    <button onclick="toggleGuide()" class="text-gray-400 hover:text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                
+                <!-- Modal Content -->
+                <div class="flex-1 overflow-y-auto p-8 prose prose-invert prose-sm max-w-none">
+                    <p class="lead">SheetJS (often referred to as <code>xlsx</code>) is the most popular library for reading/writing Excel files.</p>
+
+                    <h3 class="text-purple-300">1. The Mental Model</h3>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li><strong>Workbook (<code>wb</code>)</strong>: The entire Excel file. Contains a list of sheet names.</li>
+                        <li><strong>Worksheet (<code>ws</code>)</strong>: A single tab inside the file.</li>
+                        <li><strong>Cell</strong>: The individual box (e.g., A1, B2).</li>
+                    </ul>
+
+                    <h3 class="text-purple-300 mt-6">2. Reading Data</h3>
+                    
+                    <h4>Accessing a Single Cell</h4>
+                    <pre class="bg-gray-900 p-3 rounded border border-gray-700"><code>// Get the current sheet
+const sheetName = workbook.SheetNames[0];
+const ws = workbook.Sheets[sheetName];
+
+// Get cell object for A1
+const cell = ws['A1']; 
+// Get the actual value (.v property)
+console.log(cell ? cell.v : "Empty");</code></pre>
+
+                    <h4>Converting Sheet to Data (JSON)</h4>
+                    <p>Usually, you want an array of data, not single cells.</p>
+                    <pre class="bg-gray-900 p-3 rounded border border-gray-700"><code>// Option A: Array of Objects (Uses first row as keys)
+const jsonData = XLSX.utils.sheet_to_json(ws);
+console.log(jsonData); 
+
+// Option B: Array of Arrays (Good for raw data)
+const rawRows = XLSX.utils.sheet_to_json(ws, {header: 1});
+console.log(rawRows);</code></pre>
+
+                    <h3 class="text-purple-300 mt-6">3. Writing & Creating Data</h3>
+                    
+                    <h4>Creating Sheet from Arrays</h4>
+                    <pre class="bg-gray-900 p-3 rounded border border-gray-700"><code>const data = [
+    ["Product", "Price"],
+    ["Apple", 1.20],
+    ["Banana", 0.80]
+];
+const newSheet = XLSX.utils.aoa_to_sheet(data);</code></pre>
+
+                    <h4>Modifying a Cell</h4>
+                    <pre class="bg-gray-900 p-3 rounded border border-gray-700"><code>if(!ws['B2']) ws['B2'] = { t:'n', v:0 }; // Create if missing
+ws['B2'].v = 999; // Update value
+render(); // Refresh UI</code></pre>
+
+                    <h3 class="text-purple-300 mt-6">4. Cheat Sheet</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-gray-700 text-gray-200">
+                                    <th class="p-2 border border-gray-600">Function</th>
+                                    <th class="p-2 border border-gray-600">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="p-2 border border-gray-600 font-mono text-blue-300">XLSX.utils.sheet_to_json(ws)</td>
+                                    <td class="p-2 border border-gray-600">Convert sheet to Array of Objects</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 border border-gray-600 font-mono text-blue-300">XLSX.utils.aoa_to_sheet(arr)</td>
+                                    <td class="p-2 border border-gray-600">Create sheet from Array of Arrays</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 border border-gray-600 font-mono text-blue-300">XLSX.utils.book_new()</td>
+                                    <td class="p-2 border border-gray-600">Create new empty workbook</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2 border border-gray-600 font-mono text-blue-300">XLSX.utils.book_append_sheet(...)</td>
+                                    <td class="p-2 border border-gray-600">Add sheet to workbook</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="h-10"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. Global State ---
+        let editor;
+        let workbook; 
+        let activeSheetIndex = 0;
+        let isPaused = false;
+        
+        const initialData = [
+            ["ID", "Name", "Role", "Score"],
+            [101, "Alice", "Dev", 85],
+            [102, "Bob", "Designer", 92],
+            [103, "Charlie", "Manager", 78],
+            [104, "David", "Dev", 88]
+        ];
+
+        const defaultCode = `// 1. Get the current worksheet
+const sheetName = workbook.SheetNames[0];
+const worksheet = workbook.Sheets[sheetName];
+
+console.log("Active Sheet: " + sheetName);
+
+// 2. Read cell B2
+const cellB2 = worksheet['B2'];
+console.log("Value in B2: " + (cellB2 ? cellB2.v : "Empty"));
+
+// 3. Add a new row
+let data = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+
+console.log("Adding new employee...");
+data.push([105, "Eve", "Intern", 95]);
+
+// 4. Update the worksheet
+const newWorksheet = XLSX.utils.aoa_to_sheet(data);
+workbook.Sheets[sheetName] = newWorksheet;
+
+console.log("Updated workbook successfully!");
+render(); 
+`;
+
+        // --- 2. Editor & Intelligence ---
+        function initEditor() {
+            ace.require("ace/ext/language_tools");
+            editor = ace.edit("editor");
+            editor.setTheme("ace/theme/monokai");
+            editor.session.setMode("ace/mode/javascript");
+            editor.setOptions({
+                enableBasicAutocompletion: true,
+                enableLiveAutocompletion: true,
+                showPrintMargin: false,
+                fontSize: 14
+            });
+            editor.setValue(defaultCode, -1);
+            
+            // SheetJS Completer
+            const sheetJSCompleter = {
+                getCompletions: function(editor, session, pos, prefix, callback) {
+                    if (prefix.length === 0) { callback(null, []); return; }
+                    const completions = [
+                        {caption: 'workbook', value: 'workbook', meta: 'Global'},
+                        {caption: 'XLSX', value: 'XLSX', meta: 'Library'},
+                        {caption: 'console', value: 'console', meta: 'Global'},
+                        {caption: 'sheet_to_json', value: 'XLSX.utils.sheet_to_json(sheet)', meta: 'Utils'},
+                        {caption: 'json_to_sheet', value: 'XLSX.utils.json_to_sheet(data)', meta: 'Utils'},
+                        {caption: 'aoa_to_sheet', value: 'XLSX.utils.aoa_to_sheet(data)', meta: 'Utils'},
+                        {caption: 'book_new', value: 'XLSX.utils.book_new()', meta: 'Utils'},
+                        {caption: 'book_append_sheet', value: 'XLSX.utils.book_append_sheet(wb, sheet, name)', meta: 'Utils'},
+                        {caption: 'SheetNames', value: 'workbook.SheetNames', meta: 'Prop'},
+                        {caption: 'Sheets', value: 'workbook.Sheets', meta: 'Prop'}
+                    ];
+                    callback(null, completions);
+                }
+            };
+            editor.completers = [sheetJSCompleter];
+
+            editor.commands.addCommand({
+                name: 'runCode',
+                bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
+                exec: function() { runCode(); }
+            });
+        }
+
+        function initWorkbook() {
+            workbook = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(initialData);
+            XLSX.utils.book_append_sheet(workbook, ws, "Employees");
+            const ws2 = XLSX.utils.aoa_to_sheet([["Department", "Budget"], ["IT", 50000], ["HR", 20000]]);
+            XLSX.utils.book_append_sheet(workbook, ws2, "Budgets");
+            render();
+        }
+
+        // --- 3. UI Functions ---
+
+        function toggleGuide() {
+            const modal = document.getElementById('guideModal');
+            if(modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function render() {
+            const previewContainer = document.getElementById('html-preview');
+            const tabContainer = document.getElementById('sheet-tabs');
+            previewContainer.innerHTML = "";
+            tabContainer.innerHTML = "";
+
+            if(!workbook || workbook.SheetNames.length === 0) {
+                previewContainer.innerHTML = "<div class='text-gray-500 p-4'>No sheets</div>";
+                return;
+            }
+            if (activeSheetIndex >= workbook.SheetNames.length) activeSheetIndex = 0;
+
+            workbook.SheetNames.forEach((name, index) => {
+                const tab = document.createElement('div');
+                tab.className = `sheet-tab ${index === activeSheetIndex ? 'active' : ''}`;
+                tab.innerText = name;
+                tab.onclick = () => { activeSheetIndex = index; render(); };
+                tabContainer.appendChild(tab);
+            });
+
+            const activeSheetName = workbook.SheetNames[activeSheetIndex];
+            const activeSheet = workbook.Sheets[activeSheetName];
+            const html = XLSX.utils.sheet_to_html(activeSheet, { id: "sheet-table", editable: false });
+            
+            const content = document.createElement('div');
+            content.className = "w-full h-full"; 
+            content.innerHTML = html;
+            previewContainer.appendChild(content);
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                try {
+                    workbook = XLSX.read(data, {type: 'array'});
+                    activeSheetIndex = 0;
+                    editor.setValue(`// Loaded: ${file.name}\nconsole.log("Sheets:", workbook.SheetNames);\nconst ws = workbook.Sheets[workbook.SheetNames[0]];\nconst json = XLSX.utils.sheet_to_json(ws);\nconsole.log("Preview:", json.slice(0,2));`, -1);
+                    render();
+                    log(`System: Loaded "${file.name}"`, "text-blue-400");
+                } catch(err) { log("Error: " + err.message, "text-red-500"); }
+            };
+            reader.readAsArrayBuffer(file);
+            e.target.value = '';
+        }
+
+        const wait = (ms) => new Promise(resolve => {
+            if(isPaused) {
+                const check = setInterval(() => {
+                    if(!isPaused) { clearInterval(check); setTimeout(resolve, ms); }
+                }, 100);
+            } else { setTimeout(resolve, ms); }
+        });
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('pauseBtn');
+            btn.innerText = isPaused ? "Resume" : "Pause";
+            btn.classList.toggle('bg-amber-600');
+            btn.classList.toggle('bg-green-600');
+            log(isPaused ? "System: Paused" : "System: Resumed", isPaused ? "text-yellow-400" : "text-green-400");
+        }
+
+        function log(message, colorClass = "text-green-300") {
+            const consoleDiv = document.getElementById('console-output');
+            const line = document.createElement('div');
+            if (typeof message === 'object') {
+                try { message = JSON.stringify(message, null, 2); } catch(e) { message = "[Object]"; }
+                line.className = "whitespace-pre text-blue-300 border-l-2 border-blue-500 pl-2 my-1";
+            } else { line.className = colorClass; }
+            line.innerText = `> ${message}`;
+            consoleDiv.appendChild(line);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearConsole() { document.getElementById('console-output').innerHTML = '<div class="text-gray-500 italic">// Console ready...</div>'; }
+        function downloadWorkbook() { XLSX.writeFile(workbook, 'practice_sheet.xlsx'); }
+
+        async function runCode() {
+            const code = editor.getValue();
+            document.getElementById('pauseBtn').classList.remove('hidden');
+            const consoleDiv = document.getElementById('console-output');
+            const sep = document.createElement('div');
+            sep.className = "border-t border-gray-700 my-2 pt-1 text-gray-500 text-xs text-center";
+            sep.innerText = `--- Run at ${new Date().toLocaleTimeString()} ---`;
+            consoleDiv.appendChild(sep);
+
+            const consoleProxy = {
+                log: (msg) => log(msg),
+                error: (msg) => log(msg, "text-red-400"),
+                warn: (msg) => log(msg, "text-yellow-400"),
+                table: (msg) => log(msg)
+            };
+
+            try {
+                const asyncFunction = new Function('workbook', 'XLSX', 'console', 'render', 'wait', `return (async () => { try { ${code} } catch(err) { console.error(err.toString()); } })()`);
+                await asyncFunction(workbook, XLSX, consoleProxy, render, wait);
+            } catch (err) { log("Error: " + err.message, "text-red-500"); } 
+            finally {
+                document.getElementById('pauseBtn').classList.add('hidden');
+                if(isPaused) togglePause();
+            }
+        }
+
+        function resetPlayground() {
+            if(confirm("Reset everything?")) {
+                activeSheetIndex = 0;
+                initWorkbook();
+                editor.setValue(defaultCode, -1);
+                clearConsole();
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initEditor();
+            initWorkbook();
+            window.addEventListener('resize', () => { if(editor) editor.resize(); });
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault(); runCode();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
